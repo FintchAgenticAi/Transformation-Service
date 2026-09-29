@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "transformation-rules": {
+      "command": "C:\\Users\\HP\\Desktop\\ai-financial-platform\\venv\\Scripts\\python.exe",
+      "args": ["-m", "mcp_server"],
+      "cwd": "C:\\Users\\HP\\Desktop\\ai-financial-platform",
+      "env": {
+        "TRANSFORMATION_API_BASE_URL": "http://127.0.0.1:8000"
+      }
+    }
+  }
+}

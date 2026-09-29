@@ -3,7 +3,7 @@
 Silver Zone Transformation Rules service (Scrums 1–6 + 8–10).
 
 Your scope: **rule catalog + APIs + execute selected rules + logs**.  
-Partner (Sunali) scope: **MCP tools + agent that selects rules**.
+Partner (Sunali) scope: **MCP tools + agent that selects rules** — or use the included **`mcp_server`** package (stdio) in this repo.
 
 ## Run
 
@@ -100,11 +100,12 @@ Request:
 
 ```json
 {
-  "rule_codes": ["TR_002", "TR_001", "TR_010"],
-  "data": { "text": "  apple  ", "amount": 100, "tax": 10 },
+  "rule_ids": [2, 1, 3],
+  "execution_order": [2, 1, 3],
+  "data": { "text": "  apple  ", "amount": "100", "tax": "10" },
   "param_overrides": {
-    "TR_001": { "column_name": "text" },
-    "TR_002": { "column_name": "text" }
+    "1": { "column_name": "text" },
+    "2": { "column_name": "text" }
   },
   "strict": true
 }
@@ -112,25 +113,28 @@ Request:
 
 | Field | Meaning |
 |-------|---------|
-| `rule_codes` | Ordered selection (non-empty, no duplicates) |
-| `data` | Input record to transform |
-| `param_overrides` | Optional per-rule parameter overrides |
-| `strict` | `true`: exact order, no auto deps. `false`: insert missing hard deps |
+| `rule_ids` | Selected rules pool (`rule_id` from `GET /rules`) |
+| `execution_order` | Rule IDs in the exact order they must run |
+| `data` | One input record (row) to transform |
+| `param_overrides` | Optional per-rule overrides (key by `rule_id` or `rule_code`) |
+| `strict` | `true`: exact `execution_order`. `false`: insert missing hard deps |
 
 Example success response (shape):
 
 ```json
 {
   "request_id": "uuid...",
+  "requested_rule_ids": [2, 1, 3],
+  "execution_order_ids": [2, 1, 3],
   "requested_rules": ["TR_002", "TR_001", "TR_010"],
   "execution_order": ["TR_002", "TR_001", "TR_010"],
   "strict": true,
   "status": "success",
-  "data": { "text": "APPLE", "amount": 100, "tax": 10, "total": 110.0 },
+  "data": { "text": "APPLE", "amount": 100.0, "tax": 10.0, "total": 110.0 },
   "steps": [
-    { "rule_code": "TR_002", "status": "success" },
-    { "rule_code": "TR_001", "status": "success" },
-    { "rule_code": "TR_010", "status": "success" }
+    { "rule_id": 2, "rule_code": "TR_002", "status": "success", "attributes": [] },
+    { "rule_id": 1, "rule_code": "TR_001", "status": "success", "attributes": [] },
+    { "rule_id": 3, "rule_code": "TR_010", "status": "success", "attributes": [] }
   ],
   "log_id": 42
 }
@@ -156,8 +160,9 @@ Demo / single-root mode: runs one rule plus its dependency graph.
 
 | Case | HTTP | `detail.error` |
 |------|------|----------------|
-| Empty `rule_codes` | `400` | `empty_selection` |
-| Duplicate codes | `400` | `duplicate_rule` |
+| Empty `rule_ids` / `execution_order` | `400` | `empty_selection` / `empty_execution_order` |
+| `execution_order` not in `rule_ids` | `400` | `invalid_execution_order` |
+| Duplicate rule IDs | `400` | `duplicate_rule` |
 | Unknown rule | `404` | `rule_not_found` |
 | Inactive rule | `400` | `inactive_rule` |
 | Missing/bad params or overrides | `400` | `param_validation_failed` |
@@ -202,3 +207,36 @@ python scripts/test_rules_api.py
 | `TR_010` | Calculate Total | numeric; hard dep on `TR_002`, soft dep on `TR_001` |
 
 Larger real-dataset rule library (Scrum 7) can be added later without changing this handshake.
+
+---
+
+## MCP server (AI layer adapter)
+
+Separate process that exposes your `/rules` APIs as **MCP tools** (stdio). Full guide: [`docs/MCP_Server.md`](docs/MCP_Server.md)
+
+```powershell
+# Terminal 1
+uvicorn main:app --reload
+
+# Terminal 2
+pip install -r requirements.txt
+python -m mcp_server
+```
+
+| MCP tool | REST API |
+|----------|----------|
+| `list_rules` | `GET /rules` |
+| `get_rule` | `GET /rules/{rule_code}` |
+| `execute_selected` | `POST /rules/execute-selected` |
+| `execute_rule` | `POST /rules/execute` |
+| `list_logs` | `GET /rules/logs` |
+
+Env: `TRANSFORMATION_API_BASE_URL=http://127.0.0.1:8000`
+
+Smoke test (HTTP client only, no Cursor):
+
+```powershell
+python scripts/test_mcp_api_client.py
+```
+
+Cursor config example: `docs/mcp_cursor_config.example.json`
